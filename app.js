@@ -22,7 +22,6 @@ const s3 = new S3Client({
 const upload = multer({ dest: 'uploads/' });
 
 // Serve HTML page
-app.use(express.static(__dirname));
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
@@ -45,16 +44,9 @@ app.post('/upload', upload.single('video'), async (req, res) => {
   };
 
   try {
-    // Upload the file to S3 with progress
-    const uploadPromise = s3.send(new PutObjectCommand(params));
-    uploadPromise.on('httpUploadProgress', (progress) => {
-      const percent = Math.round((progress.loaded / progress.total) * 100);
-      console.log('Upload Progress:', percent, '%');
-      // Send progress to the client (you may want to use WebSockets or another mechanism)
-      res.write(`data: ${JSON.stringify({ progress: percent })}\n\n`);
-    });
-
-    await uploadPromise;
+    // Upload the file to S3
+    const data = await s3.send(new PutObjectCommand(params));
+    console.log('File uploaded successfully:', data);
 
     // Optionally, you can delete the local file after uploading to S3
     fs.unlinkSync(file.path);
