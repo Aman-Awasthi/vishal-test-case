@@ -2,15 +2,18 @@ const express = require('express');
 const multer = require('multer');
 const AWS = require('aws-sdk');
 const fs = require('fs');
+const config = require('./config.json'); // Load configuration
 
 const app = express();
 const port = 3000;
 
 // Configure AWS SDK with your credentials and S3 bucket details
-const s3 = new AWS.S3({
-  accessKeyId: 'YOUR_ACCESS_KEY',
-  secretAccessKey: 'YOUR_SECRET_KEY',
+AWS.config.update({
+  accessKeyId: config.aws.accessKeyId,
+  secretAccessKey: config.aws.secretAccessKey,
 });
+
+const s3 = new AWS.S3();
 
 // Multer middleware for handling file uploads
 const upload = multer({ dest: 'uploads/' });
@@ -32,7 +35,7 @@ app.post('/upload', upload.single('video'), (req, res) => {
 
   // S3 upload parameters
   const params = {
-    Bucket: 'YOUR_S3_BUCKET_NAME',
+    Bucket: config.aws.bucketName,
     Key: file.originalname,
     Body: fileContent,
   };
