@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand } = require('@aws-sdk/client-s3');
 const { fromCognitoIdentityPool } = require('@aws-sdk/credential-provider-cognito-identity');
 const fs = require('fs');
 const config = require('./config.json'); // Load configuration
@@ -43,21 +43,55 @@ app.post('/upload', upload.single('video'), async (req, res) => {
   };
 
   try {
-    // Upload the file to S3 with progress tracking
-    const command = new PutObjectCommand(params);
+    // Create a multipart upload
+    const createMultipartParams = {
+      Bucket: params.Bucket,
+      Key: params.Key,
+    };
+    const createMultipartCommand = new CreateMultipartUploadCommand(createMultipartParams);
+    const createMultipartOutput = await s3.send(createMultipartCommand);
+
+    // Upload the file parts with progress tracking
     const totalSize = fs.statSync(file.path).size;
     let uploadedSize = 0;
+    const partSize = 5 * 1024 * 1024; // 5 MB parts
+    const totalParts = Math.ceil(totalSize / partSize);
+    const uploadId = createMultipartOutput.UploadId;
 
-    const uploader = await s3.send(command, {
-      onUploadProgress: (progress) => {
-        uploadedSize = progress.loaded;
-        const percent = Math.round((uploadedSize / totalSize) * 100);
-        console.log(`Upload progress: ${percent}%`);
-        // Emit the progress to the client using WebSocket or update it on the page
-      },
-    });
+    for (let i = 0; i < totalParts; i++) {
+      const start = i * partSize;
+      const end = Math.min(start + partSize, totalSize);
+      const part = fileContent.slice(start, end);
 
-    console.log('File uploaded successfully:', uploader);
+      const uploadPartParams = {
+        Bucket: params.Bucket,
+        Key: params.Key,
+        PartNumber: i + 1,
+        UploadId: uploadId,
+        Body: part,
+      };
+      const uploadPartCommand = new UploadPartCommand(uploadPartParams);
+
+      const partUploadOutput = await s3.send(uploadPartCommand, {
+        onUploadProgress: (progress) => {
+          uploadedSize += progress.loaded;
+          const percent = Math.round((uploadedSize / totalSize) * 100);
+          console.log(`Upload progress: ${percent}%`);
+          // Emit the progress to the client using WebSocket or update it on the page
+        },
+      });
+    }
+
+    // Complete the multipart upload
+    const completeMultipartParams = {
+      Bucket: params.Bucket,
+      Key: params.Key,
+      UploadId: uploadId,
+    };
+    const completeMultipartCommand = new CompleteMultipartUploadCommand(completeMultipartParams);
+    const completeMultipartOutput = await s3.send(completeMultipartCommand);
+
+    console.log('File uploaded successfully:', completeMultipartOutput);
 
     // Optionally, you can delete the local file after uploading to S3
     fs.unlinkSync(file.path);
