@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { fromCognitoIdentityPool } = require('@aws-sdk/credential-provider-cognito-identity');
-
 const fs = require('fs');
 const config = require('./config.json'); // Load configuration
 
@@ -44,9 +43,21 @@ app.post('/upload', upload.single('video'), async (req, res) => {
   };
 
   try {
-    // Upload the file to S3
-    const data = await s3.send(new PutObjectCommand(params));
-    console.log('File uploaded successfully:', data);
+    // Upload the file to S3 with progress tracking
+    const command = new PutObjectCommand(params);
+    const totalSize = fs.statSync(file.path).size;
+    let uploadedSize = 0;
+
+    const uploader = await s3.send(command, {
+      onUploadProgress: (progress) => {
+        uploadedSize = progress.loaded;
+        const percent = Math.round((uploadedSize / totalSize) * 100);
+        console.log(`Upload progress: ${percent}%`);
+        // Emit the progress to the client using WebSocket or update it on the page
+      },
+    });
+
+    console.log('File uploaded successfully:', uploader);
 
     // Optionally, you can delete the local file after uploading to S3
     fs.unlinkSync(file.path);
