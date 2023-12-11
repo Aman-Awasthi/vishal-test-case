@@ -12,9 +12,10 @@ const port = 3000;
 // Configure AWS SDK v3 with your credentials and S3 bucket details
 const s3 = new S3Client({
   region: config.aws.region,
-  credentials: fromCognitoIdentityPool({
-    client: config.aws.clientId, // Your Cognito Identity Pool ID
-  }),
+  credentials: {
+    accessKeyId: config.aws.accessKeyId,
+    secretAccessKey: config.aws.secretAccessKey,
+  },
 });
 
 // Multer middleware for handling file uploads
